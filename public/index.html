@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PNG to SVG Vectorizer (puzzle #28)</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #f7f7f8; color: #111; }
+  h1 { font-size: 1.4rem; }
+  .panel { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 280px; }
+  img, svg { max-width: 100%; background: #eee; border: 1px dashed #ccc; }
+  label { display: block; margin: 10px 0 4px; font-size: 0.9rem; font-weight: 600; }
+  button { background: #2563eb; color: #fff; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+  button:disabled { background: #999; cursor: not-allowed; }
+  textarea { width: 100%; height: 160px; font-family: monospace; font-size: 0.75rem; }
+  .stat { font-size: 0.85rem; color: #444; }
+  .stat b { color: #111; }
+  a.dl { display: inline-block; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>PNG -> SVG Vectorizer</h1>
+  <p>Real bitmap tracing (potrace) &mdash; output contains actual <code>&lt;path&gt;</code> elements with Bezier/line <code>d</code> data, not a base64-embedded PNG.</p>
+
+  <div class="panel">
+    <input type="file" id="fileInput" accept="image/png,image/jpeg">
+    <label>Mode</label>
+    <select id="mode">
+      <option value="bw">Black &amp; white (single path)</option>
+      <option value="color">Color (posterized, multi-path)</option>
+    </select>
+    <label>Threshold (0-255, lower = more black)</label>
+    <input type="range" id="threshold" min="0" max="255" value="160">
+    <span id="thresholdVal">160</span>
+    <br><br>
+    <button id="goBtn">Vectorize</button>
+  </div>
+
+  <div class="row">
+    <div class="col panel">
+      <h3>Original PNG</h3>
+      <img id="origImg" alt="original">
+      <div class="stat" id="origStat"></div>
+    </div>
+    <div class="col panel">
+      <h3>Traced SVG (rendered)</h3>
+      <div id="svgOut"></div>
+      <div class="stat" id="svgStat"></div>
+      <a class="dl" id="dlLink" download="vectorized.svg">Download .svg</a>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Raw SVG source (proof of real vector paths)</h3>
+    <textarea id="svgSrc" readonly></textarea>
+  </div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const thresholdEl = document.getElementById('threshold');
+const thresholdVal = document.getElementById('thresholdVal');
+thresholdEl.addEventListener('input', () => thresholdVal.textContent = thresholdEl.value);
+
+let fileBuf = null;
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  document.getElementById('origImg').src = url;
+  document.getElementById('origStat').textContent = `${f.name} — ${(f.size/1024).toFixed(1)} KB`;
+});
+
+document.getElementById('goBtn').addEventListener('click', async () => {
+  const f = fileInput.files[0];
+  if (!f) return alert('Choose a PNG first');
+  const btn = document.getElementById('goBtn');
+  btn.disabled = true; btn.textContent = 'Tracing...';
+
+  const fd = new FormData();
+  fd.append('image', f);
+  fd.append('mode', document.getElementById('mode').value);
+  fd.append('threshold', thresholdEl.value);
+
+  try {
+    const r = await fetch('/api/vectorize', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('svgOut').innerHTML = data.svg;
+    document.getElementById('svgSrc').value = data.svg;
+
+    const pathCount = (data.svg.match(/<path/g) || []).length;
+    const svgBytes = new TextEncoder().encode(data.svg).length;
+    document.getElementById('svgStat').textContent =
+      `${(svgBytes/1024).toFixed(1)} KB SVG, ${pathCount} <path> element(s), mode=${data.mode}, threshold=${data.threshold}`;
+
+    const blob = new Blob([data.svg], { type: 'image/svg+xml' });
+    document.getElementById('dlLink').href = URL.createObjectURL(blob);
+  } catch (e) {
+    alert('Vectorize failed: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Vectorize';
+  }
+});
+</script>
+</body>
+</html>

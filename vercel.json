@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/vectorize.js": {
+      "maxDuration": 30
+    }
+  }
+}

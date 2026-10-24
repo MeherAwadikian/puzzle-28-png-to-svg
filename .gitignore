@@ -1,0 +1,7 @@
+node_modules/
+server.log
+*.json
+!package.json
+!package-lock.json
+!vercel.json
+.vercel
